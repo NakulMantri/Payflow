@@ -291,18 +291,6 @@ When submitting bill payments, use these consumer number suffixes to test specif
 
 ---
 
-## 🌟 Resume Highlights
-
-Here is how you can describe this project on your resume:
-
-- **Idempotent Payment Processing**: Engineered a two-tier idempotency system using Redis `SETNX` distributed locks and PostgreSQL durable records, guaranteeing zero double-charge transactions under high-frequency client retries and network partitions.
-- **Fault-Tolerant Exponential Backoff**: Designed an asynchronous retry queue with exponential backoff and jitter ($2^n$ progression, max 3 attempts) for transient switch timeouts, incorporating automatic ACID-compliant wallet compensation upon exhaustion.
-- **Event-Driven Architecture with Kafka**: Built an asynchronous event pipeline utilizing Apache Kafka for payment notification streaming, decoupling notification dispatch from latency-critical financial execution paths.
-- **ACID Double-Entry Accounting Ledger**: Implemented a balanced double-entry ledger enforcing zero-sum financial invariant ($\sum \text{Debits} == \sum \text{Credits}$) with PostgreSQL row-level pessimistic locking (`SELECT ... FOR UPDATE`) to prevent concurrency race conditions.
-- **Automated Financial Reconciliation**: Created a scheduled reconciliation engine that cross-checks unsettled internal payment states against external gateway settlement batches, auto-resolving drift and logging audit records.
-- **Production Observability & Resilience**: Incorporated sliding-window rate limiting (HTTP 429), distributed MDC correlation ID tracing (`X-Correlation-ID`), HMAC-SHA256 webhook verification, and multi-stage Docker containerization with automated GitHub Actions CI.
-
----
 
 ## 📄 License
 This project is licensed under the Apache 2.0 License.
