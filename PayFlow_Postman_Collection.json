@@ -1,0 +1,302 @@
+{
+  "info": {
+    "name": "PayFlow - Production Bill Payment & Recharge Platform",
+    "description": "Postman Collection for PayFlow: Idempotency, Double-entry Ledger, Concurrency Control, Kafka Notifications, Retries & Reconciliation",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "authToken",
+      "value": ""
+    },
+    {
+      "key": "idempotencyKey",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Authentication",
+      "item": [
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"alex@example.com\",\n  \"password\": \"password123\",\n  \"fullName\": \"Alex Morgan\",\n  \"phone\": \"+919876543210\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/register"
+          }
+        },
+        {
+          "name": "Login (Sets Auth Token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.data && jsonData.data.token) {",
+                  "    pm.collectionVariables.set('authToken', jsonData.data.token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"alex@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          }
+        },
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/me"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Wallet & Ledger",
+      "item": [
+        {
+          "name": "Get Wallet Balance",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/wallets/me"
+          }
+        },
+        {
+          "name": "Top Up Wallet",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 2500.00,\n  \"paymentMethod\": \"UPI\",\n  \"reference\": \"UPI_TOPUP_7777\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/wallets/top-up"
+          }
+        },
+        {
+          "name": "Get Wallet Double-Entry Ledger",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/wallets/ledger"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Billers",
+      "item": [
+        {
+          "name": "List All Billers",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/billers"
+          }
+        },
+        {
+          "name": "Filter Billers by Category",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/billers?category=ELECTRICITY"
+          }
+        },
+        {
+          "name": "Save Consumer Account",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"billerId\": 1,\n  \"consumerNumber\": \"900012345678\",\n  \"nickname\": \"Apartment Power\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/billers/accounts"
+          }
+        },
+        {
+          "name": "Get Saved Accounts",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/billers/accounts"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Payments & Idempotency",
+      "item": [
+        {
+          "name": "Pay Bill (Generate New Idempotency-Key)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Idempotency-Key", "value": "idemp-{{$guid}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"billerId\": 1,\n  \"consumerNumber\": \"900012345678\",\n  \"amount\": 450.00,\n  \"saveAccount\": false\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/payments"
+          }
+        },
+        {
+          "name": "Test Idempotency Re-Send (Same Idempotency-Key)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Idempotency-Key", "value": "fixed-idemp-key-abc-123" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"billerId\": 1,\n  \"consumerNumber\": \"900012345678\",\n  \"amount\": 300.00\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/payments"
+          }
+        },
+        {
+          "name": "Test Gateway Timeout (Ends in 999)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Idempotency-Key", "value": "idemp-timeout-{{$guid}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"billerId\": 1,\n  \"consumerNumber\": \"900012345999\",\n  \"amount\": 500.00\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/payments"
+          }
+        },
+        {
+          "name": "Test Hard Decline (Ends in 000)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Idempotency-Key", "value": "idemp-decline-{{$guid}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"billerId\": 1,\n  \"consumerNumber\": \"900012345000\",\n  \"amount\": 250.00\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/payments"
+          }
+        },
+        {
+          "name": "Get User Payment History",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/payments"
+          }
+        },
+        {
+          "name": "Get Transaction Double-Entry Ledger",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/payments/{{lastTxnId}}/ledger"
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Reconciliation",
+      "item": [
+        {
+          "name": "Trigger On-Demand Reconciliation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/reconciliation/run"
+          }
+        },
+        {
+          "name": "Get Reconciliation Audit Records",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/reconciliation/records"
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Mock Gateway & Webhook Simulator",
+      "item": [
+        {
+          "name": "Inspect Gateway Settlement Registry",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/mock-gateway/registry"
+          }
+        },
+        {
+          "name": "Simulate Async Webhook Callback",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/mock-gateway/simulate-webhook?transactionRef=TXN_SAMPLE_01&amount=500.00&status=SUCCESS"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,143 @@
+spring:
+  application:
+    name: payflow-backend
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  main:
+    allow-bean-definition-overriding: true
+
+server:
+  port: ${PORT:8080}
+  servlet:
+    context-path: /
+
+# Application specific configurations
+payflow:
+  jwt:
+    secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000} # 24 hours
+  rate-limiting:
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    capacity: ${RATE_LIMIT_CAPACITY:20} # 20 requests
+    refill-seconds: ${RATE_LIMIT_REFILL_SECONDS:60} # per 60 seconds
+  idempotency:
+    ttl-seconds: ${IDEMPOTENCY_TTL_SECONDS:86400} # 24 hours
+    lock-timeout-seconds: ${IDEMPOTENCY_LOCK_TIMEOUT_SECONDS:120}
+  mock-gateway:
+    failure-rate: ${MOCK_GATEWAY_FAILURE_RATE:0.15} # 15% random failure/timeout simulation
+    timeout-ms: ${MOCK_GATEWAY_TIMEOUT_MS:200}
+    webhook-secret: ${MOCK_GATEWAY_WEBHOOK_SECRET:pf_webhook_secret_key_987654321}
+  retry:
+    max-attempts: ${PAYMENT_MAX_RETRY_ATTEMPTS:3}
+    initial-backoff-ms: ${PAYMENT_INITIAL_BACKOFF_MS:2000}
+    multiplier: ${PAYMENT_BACKOFF_MULTIPLIER:2.0}
+  reconciliation:
+    cron: ${RECONCILIATION_CRON:0 */5 * * * *} # Every 5 minutes
+  scheduled-bills:
+    cron: ${SCHEDULED_BILLS_CRON:0 */1 * * * *} # Every minute
+
+# Actuator & Management
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+# OpenAPI / Swagger
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%X{correlationId:-SYSTEM}] [%thread] %-5level %logger{36} - %msg%n"
+  level:
+    root: INFO
+    com.payflow: DEBUG
+
+---
+# Local profile (uses H2 in-memory DB, local in-memory fallbacks for Redis & Kafka)
+spring:
+  config:
+    activate:
+      on-profile: local
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+  datasource:
+    url: jdbc:h2:mem:payflowdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+payflow:
+  redis:
+    enabled: ${REDIS_ENABLED:false}
+  kafka:
+    enabled: ${KAFKA_ENABLED:false}
+
+---
+# Production / Docker profile (PostgreSQL, live Redis, live Kafka)
+spring:
+  config:
+    activate:
+      on-profile: prod
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/payflow}
+    username: ${SPRING_DATASOURCE_USERNAME:payflow_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:payflow_secret}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      idle-timeout: 300000
+      connection-timeout: 20000
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2000ms
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: payflow-notification-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+payflow:
+  redis:
+    enabled: true
+  kafka:
+    enabled: true

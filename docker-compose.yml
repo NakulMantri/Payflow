@@ -1,0 +1,106 @@
+version: '3.8'
+
+services:
+  # 1. PayFlow Spring Boot Backend Application
+  payflow-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: payflow-backend
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://payflow-postgres:5432/payflow
+      - SPRING_DATASOURCE_USERNAME=payflow_user
+      - SPRING_DATASOURCE_PASSWORD=payflow_secret
+      - REDIS_HOST=payflow-redis
+      - REDIS_PORT=6379
+      - KAFKA_BOOTSTRAP_SERVERS=payflow-kafka:9092
+      - JWT_SECRET=404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+      - RATE_LIMIT_CAPACITY=20
+      - RATE_LIMIT_REFILL_SECONDS=60
+      - MOCK_GATEWAY_FAILURE_RATE=0.15
+    depends_on:
+      payflow-postgres:
+        condition: service_healthy
+      payflow-redis:
+        condition: service_healthy
+      payflow-kafka:
+        condition: service_started
+    networks:
+      - payflow-network
+
+  # 2. PostgreSQL Database
+  payflow-postgres:
+    image: postgres:16-alpine
+    container_name: payflow-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=payflow
+      - POSTGRES_USER=payflow_user
+      - POSTGRES_PASSWORD=payflow_secret
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./src/main/resources/schema.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payflow_user -d payflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - payflow-network
+
+  # 3. Redis Cache & Idempotency Store
+  payflow-redis:
+    image: redis:7.2-alpine
+    container_name: payflow-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - payflow-network
+
+  # 4. Apache Kafka (KRaft mode - no Zookeeper dependency required)
+  payflow-kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: payflow-kafka
+    ports:
+      - "9092:9092"
+      - "9094:9094"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://payflow-kafka:9092,PLAINTEXT_HOST://localhost:9094'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@payflow-kafka:9093'
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_HOST://0.0.0.0:9094'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+      CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - payflow-network
+
+networks:
+  payflow-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  kafka_data:
